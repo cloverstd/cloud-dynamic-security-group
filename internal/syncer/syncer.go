@@ -52,8 +52,6 @@ func (e *Engine) Sync(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	marker := "cdsg:v1:" + e.Config.OwnerID + ":tcp4"
-	desired := cloud.Rule{CIDR: ip.String() + "/32", Description: marker, Protocol: "tcp", Action: "accept", Start: 1, End: 65535, Priority: 1}
 	accounts := map[string]config.Account{}
 	for _, a := range e.Config.Accounts {
 		accounts[a.Name] = a
@@ -64,7 +62,15 @@ func (e *Engine) Sync(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		p, err := e.Factory(accounts[t.Account], t.Region, e.Config.Timeout)
+		account := accounts[t.Account]
+		marker := "cdsg:v1:" + e.Config.OwnerID + ":tcp4"
+		if account.Provider == "volcengine" {
+			// Volcengine descriptions allow dots but reject colons. Keep the
+			// provider's exact marker in snapshots and deletion parameters.
+			marker = "cdsg.v1." + e.Config.OwnerID + ".tcp4"
+		}
+		desired := cloud.Rule{CIDR: ip.String() + "/32", Description: marker, Protocol: "tcp", Action: "accept", Start: 1, End: 65535, Priority: 1}
+		p, err := e.Factory(account, t.Region, e.Config.Timeout)
 		if err == nil {
 			var groups []string
 			err = retry(ctx, func() error { var de error; groups, de = p.Discover(ctx, t.InstanceIDs); return de })

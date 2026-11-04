@@ -127,6 +127,68 @@ func TestReconciliationLifecycle(t *testing.T) {
 	}
 }
 
+func TestProviderMarkersAndOwnershipLifecycle(t *testing.T) {
+	for _, provider := range []string{"volcengine", "tencent", "aliyun"} {
+		t.Run(provider, func(t *testing.T) {
+			marker := "cdsg:v1:home-a_b:tcp4"
+			otherMarker := "cdsg:v1:other:tcp4"
+			if provider == "volcengine" {
+				marker = "cdsg.v1.home-a_b.tcp4"
+				otherMarker = "cdsg.v1.other.tcp4"
+			}
+			old := rule("1.1.1.1", "home-a_b")
+			old.Description = marker
+			other := rule("9.9.9.9", "other")
+			other.Description = otherMarker
+			manual := rule("4.2.2.2", "manual")
+			manual.Description = marker + " extra"
+			f := &fake{groups: []string{"sg-example"}, rules: []cloud.Rule{old, other, manual}}
+			e, _ := engine(f)
+			e.Config.OwnerID = "home-a_b"
+			e.Config.Accounts[0].Provider = provider
+			if err := e.Sync(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if writes(f) != "add,delete" || len(f.rules) != 3 {
+				t.Fatalf("failed to replace the stale owned rule: %v", f.events)
+			}
+			if f.rules[0] != other || f.rules[1] != manual || f.rules[2].Description != marker || f.rules[2].CIDR != "8.8.8.8/32" {
+				t.Fatalf("wrong provider marker or changed unrelated rules: %+v", f.rules)
+			}
+			// Recover ownership from the provider's unchanged description after restart.
+			f.events = nil
+			e, _ = engine(f)
+			e.Config.OwnerID = "home-a_b"
+			e.Config.Accounts[0].Provider = provider
+			if err := e.Sync(context.Background()); err != nil || writes(f) != "" {
+				t.Fatalf("restart caused writes: %v, %v", err, f.events)
+			}
+		})
+	}
+}
+
+func TestMixedAccountsUseTheirOwnProviderMarker(t *testing.T) {
+	volc, tencent := &fake{groups: []string{"sg-example"}}, &fake{groups: []string{"sg-example"}}
+	e, _ := engine(volc)
+	e.Config.Accounts = []config.Account{{Name: "volc", Provider: "volcengine"}, {Name: "tc", Provider: "tencent"}}
+	e.Config.Targets = []config.Target{
+		{Name: "volc-server", Account: "volc", Region: "region", InstanceIDs: []string{"i-example"}},
+		{Name: "tc-server", Account: "tc", Region: "region", InstanceIDs: []string{"ins-example"}},
+	}
+	e.Factory = func(a config.Account, _ string, _ time.Duration) (cloud.Provider, error) {
+		if a.Provider == "volcengine" {
+			return volc, nil
+		}
+		return tencent, nil
+	}
+	if err := e.Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(volc.rules) != 1 || volc.rules[0].Description != "cdsg.v1.home.tcp4" || len(tencent.rules) != 1 || tencent.rules[0].Description != "cdsg:v1:home:tcp4" {
+		t.Fatal("account provider marker leaked into another account")
+	}
+}
+
 func TestFailuresNeverRemoveOldRules(t *testing.T) {
 	for _, test := range []string{"add", "confirmation", "list", "conflict", "disappeared", "delete", "detect", "discovery"} {
 		t.Run(test, func(t *testing.T) {
