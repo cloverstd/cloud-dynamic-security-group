@@ -1,0 +1,13 @@
+services:
+  cdsg:
+    build: .
+    image: cdsg:local
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    env_file: .env
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+    command: [run, --config, /config/config.yaml]

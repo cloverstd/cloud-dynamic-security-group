@@ -1,0 +1,38 @@
+# Copy to config.yaml; that file is ignored by Git and Docker.
+# Keep owner_id stable across restarts. Each deployment needs its own ID.
+owner_id: home
+interval: 60s
+timeout: 10s
+ip_sources:
+  - https://api.ipify.org
+
+accounts:
+  - name: volcano-account
+    provider: volcengine
+    access_key_id_env: VOLCENGINE_ACCESS_KEY_ID
+    secret_access_key_env: VOLCENGINE_SECRET_ACCESS_KEY
+    # security_token_env: VOLCENGINE_SECURITY_TOKEN
+  - name: tencent-account
+    provider: tencent
+    access_key_id_env: TENCENTCLOUD_SECRET_ID
+    secret_access_key_env: TENCENTCLOUD_SECRET_KEY
+    # security_token_env: TENCENTCLOUD_TOKEN
+  - name: aliyun-account
+    provider: aliyun
+    access_key_id_env: ALIBABA_CLOUD_ACCESS_KEY_ID
+    secret_access_key_env: ALIBABA_CLOUD_ACCESS_KEY_SECRET
+    # security_token_env: ALIBABA_CLOUD_SECURITY_TOKEN
+
+targets:
+  - name: volcano-server
+    account: volcano-account
+    region: cn-beijing
+    instance_ids: [i-example]
+  - name: tencent-server
+    account: tencent-account
+    region: ap-singapore
+    instance_ids: [ins-example]
+  - name: aliyun-server
+    account: aliyun-account
+    region: cn-hangzhou
+    instance_ids: [i-example]

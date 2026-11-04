@@ -1,0 +1,25 @@
+# Live configuration stays local; only documented samples are tracked.
+*.yaml
+*.yml
+!config.example.yaml
+!compose.example.yaml
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials*
+secrets*
+*.log
+*.out
+coverage*
+/cdsg
+/bin/
+/dist/
+.DS_Store
+.idea/
+.vscode/
