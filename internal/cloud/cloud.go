@@ -15,6 +15,7 @@ type Rule struct {
 	CIDR        string
 	Description string
 	Protocol    string
+	Port        string // Original API port expression for tuple-based deletion.
 	Action      string
 	Start       int
 	End         int
@@ -32,6 +33,7 @@ type Snapshot struct {
 	Version string
 }
 type Provider interface {
+	// Discover returns security group IDs or instance IDs for instance firewalls.
 	Discover(context.Context, []string) ([]string, error)
 	List(context.Context, string) (Snapshot, error)
 	Add(context.Context, string, Rule) error
@@ -52,7 +54,7 @@ func APIError(code string) error {
 	}
 	lower := strings.ToLower(code)
 	retry := false
-	for _, part := range []string{"throttl", "limitexceeded.request", "requestlimit", "flowlimit", "serviceunavailable", "internalerror", "internalfailure", "timeout", "versionmismatch", "networkerror", "requesterror", "clienterror.http", "newrulenotconfirmed", "oldrulenotremoved"} {
+	for _, part := range []string{"throttl", "limitexceeded.request", "requestlimit", "flowlimit", "serviceunavailable", "internalerror", "internalfailure", "timeout", "versionmismatch", "firewallbusy", "networkerror", "requesterror", "clienterror.http", "newrulenotconfirmed", "oldrulenotremoved"} {
 		if strings.Contains(lower, part) {
 			retry = true
 		}

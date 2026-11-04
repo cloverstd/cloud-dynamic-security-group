@@ -110,7 +110,11 @@ func (c *sdkCaller) Call(ctx context.Context, service, action string, args map[s
 		if c.http.Transport != nil {
 			client.WithHttpTransport(c.http.Transport)
 		}
-		req := tchttp.NewCommonRequest(service, "2017-03-12", action)
+		version := "2017-03-12"
+		if service == "lighthouse" {
+			version = "2020-03-24"
+		}
+		req := tchttp.NewCommonRequest(service, version, action)
 		req.SetContext(ctx)
 		if err := req.SetActionParameters(args); err != nil {
 			return sanitized(err)

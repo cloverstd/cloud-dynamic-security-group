@@ -40,6 +40,7 @@ var namePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,32}$`)
 var regionPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,62}$`)
 var envPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var instancePattern = regexp.MustCompile(`^i(?:ns)?-[A-Za-z0-9]+$`)
+var lighthouseInstancePattern = regexp.MustCompile(`^lhins-[A-Za-z0-9]+$`)
 
 func Load(path string) (Config, error) {
 	f, err := os.Open(path)
@@ -80,9 +81,9 @@ func (c Config) Validate() error {
 			return errors.New("ip_sources must be HTTPS URLs without credentials, query strings or fragments")
 		}
 	}
-	accounts := map[string]bool{}
+	accounts := map[string]string{}
 	for _, a := range c.Accounts {
-		if !namePattern.MatchString(a.Name) || accounts[a.Name] {
+		if !namePattern.MatchString(a.Name) || accounts[a.Name] != "" {
 			return errors.New("account names must be unique safe aliases (1-32 characters)")
 		}
 		if a.Provider != "aliyun" && a.Provider != "tencent" && a.Provider != "volcengine" {
@@ -91,7 +92,7 @@ func (c Config) Validate() error {
 		if !envPattern.MatchString(a.AccessKeyIDEnv) || !envPattern.MatchString(a.SecretAccessKeyEnv) || (a.SecurityTokenEnv != "" && !envPattern.MatchString(a.SecurityTokenEnv)) {
 			return errors.New("credentials must reference environment variable names")
 		}
-		accounts[a.Name] = true
+		accounts[a.Name] = a.Provider
 	}
 	if len(c.Targets) == 0 {
 		return errors.New("targets cannot be empty")
@@ -101,11 +102,11 @@ func (c Config) Validate() error {
 		if !namePattern.MatchString(t.Name) || names[t.Name] {
 			return errors.New("target names must be unique safe aliases (1-32 characters)")
 		}
-		if !accounts[t.Account] || !regionPattern.MatchString(t.Region) || len(t.InstanceIDs) == 0 {
+		if accounts[t.Account] == "" || !regionPattern.MatchString(t.Region) || len(t.InstanceIDs) == 0 {
 			return fmt.Errorf("target %s requires an existing account, region and instance_ids", t.Name)
 		}
 		for _, id := range t.InstanceIDs {
-			if !instancePattern.MatchString(id) {
+			if !instancePattern.MatchString(id) && !(accounts[t.Account] == "tencent" && lighthouseInstancePattern.MatchString(id)) {
 				return fmt.Errorf("target %s contains an invalid instance ID", t.Name)
 			}
 		}
