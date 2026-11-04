@@ -87,8 +87,10 @@ targets:
 
 ## Docker
 
+发布镜像：`ghcr.io/cloverstd/cloud-dynamic-security-group:latest`，包含 Linux amd64 和 arm64。
+
 ```sh
-docker compose -f compose.example.yaml build
+docker compose -f compose.example.yaml pull
 docker compose -f compose.example.yaml run --rm cdsg sync --config /config/config.yaml --dry-run
 docker compose -f compose.example.yaml up -d
 docker compose -f compose.example.yaml logs --tail 50
@@ -96,7 +98,11 @@ docker compose -f compose.example.yaml logs --tail 50
 
 Compose 从本地 `.env` 注入凭证，并只读挂载 `config.yaml`。镜像包含程序和 CA 证书，以非 root 用户运行；构建上下文采用允许列表，不包含真实配置、`.env`、文档或 Git 历史。非 root 容器用户需要读取配置；Linux 上可以保留 `600` 并将文件所有者设为 UID `65532`，或通过受控的组读权限提供访问。
 
-支持 Go／Docker 的 Linux amd64 和 arm64 构建；本地架构使用默认 `docker build`，其他架构使用 `docker buildx build --platform ...`。
+每次推送到 `main`，GitHub Actions 会在测试、漏洞及密钥扫描全部通过后构建并推送 GHCR，更新 `latest` 和 `sha-<完整提交 SHA>` 标签；推送 `v*` 标签时发布同名镜像标签。Pull Request 只运行验证，不发布镜像。工作流使用内置 `GITHUB_TOKEN`，不需要配置额外的镜像仓库密码或云凭证。
+
+GHCR 首次发布的包可能默认为私有；如需匿名拉取，在 [Package settings](https://github.com/users/cloverstd/packages/container/cloud-dynamic-security-group/settings) 中将可见性设为 Public。私有包需要先使用具有 `read:packages` 权限的凭证执行 `docker login ghcr.io`。
+
+固定版本可将 Compose 中的 `latest` 换成 `sha-<完整提交 SHA>` 或发布标签。自行构建可执行 `docker build -t cdsg:local .`；Dockerfile 通过交叉编译支持 `docker buildx build --platform linux/amd64,linux/arm64 ...`，不需要 QEMU。
 
 ## 云账号最小操作权限
 

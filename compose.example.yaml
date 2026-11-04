@@ -1,7 +1,7 @@
 services:
   cdsg:
-    build: .
-    image: cdsg:local
+    image: ghcr.io/cloverstd/cloud-dynamic-security-group:latest
+    pull_policy: always
     restart: unless-stopped
     read_only: true
     cap_drop: [ALL]
