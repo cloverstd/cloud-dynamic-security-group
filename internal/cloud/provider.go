@@ -109,6 +109,9 @@ func (p *Adapter) Discover(ctx context.Context, ids []string) ([]string, error) 
 			switch p.Name {
 			case "tencent":
 				service = "cvm"
+				if p.lighthouse(id) {
+					service = "lighthouse"
+				}
 				args = map[string]any{"InstanceIds": []string{id}, "Limit": 100, "Offset": offset}
 			case "aliyun":
 				b, _ := json.Marshal([]string{id})
@@ -143,7 +146,10 @@ func (p *Adapter) Discover(ctx context.Context, ids []string) ([]string, error) 
 					continue
 				}
 				found = true
-				if p.Name == "volcengine" {
+				if p.lighthouse(id) {
+					// Lighthouse has a per-instance firewall rather than VPC groups.
+					instanceGroups = append(instanceGroups, id)
+				} else if p.Name == "volcengine" {
 					for _, nv := range array(inst["NetworkInterfaces"]) {
 						ni := object(nv)
 						if strings.EqualFold(str(ni["Type"]), "primary") {
@@ -187,6 +193,9 @@ func (p *Adapter) Discover(ctx context.Context, ids []string) ([]string, error) 
 }
 
 func (p *Adapter) List(ctx context.Context, group string) (Snapshot, error) {
+	if p.lighthouse(group) {
+		return p.listLighthouse(ctx, group)
+	}
 	snapshot := Snapshot{}
 	token := ""
 	tokens := map[string]bool{}
@@ -301,6 +310,9 @@ func (p *Adapter) normalize(m map[string]any) (Rule, bool) {
 }
 
 func (p *Adapter) Add(ctx context.Context, group string, r Rule) error {
+	if p.lighthouse(group) {
+		return p.addLighthouse(ctx, group, r)
+	}
 	args := map[string]any{"SecurityGroupId": group}
 	service := "vpc"
 	action := ""
@@ -334,6 +346,9 @@ func (p *Adapter) Add(ctx context.Context, group string, r Rule) error {
 }
 
 func (p *Adapter) Delete(ctx context.Context, group string, r Rule, version string) error {
+	if p.lighthouse(group) {
+		return p.deleteLighthouse(ctx, group, r, version)
+	}
 	args := map[string]any{"SecurityGroupId": group}
 	service := "vpc"
 	action := ""

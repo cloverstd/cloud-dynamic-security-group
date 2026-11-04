@@ -32,6 +32,11 @@ targets:
     account: tencent-account
     region: ap-singapore
     instance_ids: [ins-example]
+  # Lighthouse uses the same Tencent account; lhins- IDs select its firewall API.
+  - name: tencent-lighthouse
+    account: tencent-account
+    region: ap-singapore
+    instance_ids: [lhins-example]
   - name: aliyun-server
     account: aliyun-account
     region: cn-hangzhou

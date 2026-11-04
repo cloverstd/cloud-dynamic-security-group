@@ -41,3 +41,24 @@ func TestDefaultsAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestLighthouseInstanceIDs(t *testing.T) {
+	for _, ids := range []string{"lhins-example", "ins-example, lhins-example"} {
+		input := strings.Replace(valid, "instance_ids: [ins-example]", "instance_ids: ["+ids+"]", 1)
+		if _, err := Decode(strings.NewReader(input)); err != nil {
+			t.Fatalf("Tencent IDs %q: %v", ids, err)
+		}
+	}
+	for _, id := range []string{"lhins-", "lhins-bad/id", "lhins-bad id", "lhins-bad.example"} {
+		input := strings.Replace(valid, "ins-example", id, 1)
+		if _, err := Decode(strings.NewReader(input)); err == nil {
+			t.Fatalf("accepted malformed Lighthouse ID %q", id)
+		}
+	}
+	for _, provider := range []string{"aliyun", "volcengine"} {
+		input := strings.ReplaceAll(strings.Replace(valid, "provider: tencent", "provider: "+provider, 1), "ins-example", "lhins-example")
+		if _, err := Decode(strings.NewReader(input)); err == nil {
+			t.Fatalf("accepted Lighthouse ID for %s", provider)
+		}
+	}
+}
