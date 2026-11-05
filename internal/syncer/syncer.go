@@ -10,28 +10,34 @@ import (
 
 	"github.com/cloverstd/cloud-dynamic-security-group/internal/cloud"
 	"github.com/cloverstd/cloud-dynamic-security-group/internal/config"
+	"github.com/cloverstd/cloud-dynamic-security-group/internal/fail2banmate"
 )
 
 type Detector interface {
 	Detect(context.Context) (netip.Addr, error)
 }
 type Factory func(config.Account, string, time.Duration) (cloud.Provider, error)
-type Engine struct {
-	Config   config.Config
-	Detector Detector
-	Factory  Factory
-	Log      *slog.Logger
-	DryRun   bool
+type WhitelistSyncer interface {
+	Sync(context.Context, string, netip.Addr, bool) (bool, error)
 }
 
-func retry(ctx context.Context, fn func() error) error {
+type Engine struct {
+	Config       config.Config
+	Detector     Detector
+	Factory      Factory
+	Log          *slog.Logger
+	DryRun       bool
+	Fail2banMate WhitelistSyncer
+}
+
+func retry(ctx context.Context, retryable func(error) bool, fn func() error) error {
 	var err error
 	for attempt := 0; attempt < 3; attempt++ {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		err = fn()
-		if err == nil || !cloud.Retryable(err) {
+		if err == nil || !retryable(err) {
 			return err
 		}
 		if attempt < 2 {
@@ -58,6 +64,21 @@ func (e *Engine) Sync(ctx context.Context) error {
 	}
 	seen := map[string]bool{}
 	var failures []error
+	if e.Fail2banMate != nil {
+		var wouldChange bool
+		err := retry(ctx, fail2banmate.Retryable, func() error {
+			var err error
+			wouldChange, err = e.Fail2banMate.Sync(ctx, e.Config.OwnerID, ip, e.DryRun)
+			return err
+		})
+		if err != nil {
+			failures = append(failures, err)
+		} else if e.DryRun {
+			e.Log.Info("Fail2ban Mate whitelist preview", "owner", e.Config.OwnerID, "ip", cloud.Mask(ip.String()), "would_change_ip", wouldChange)
+		} else {
+			e.Log.Info("Fail2ban Mate whitelist renewed", "owner", e.Config.OwnerID, "ip", cloud.Mask(ip.String()))
+		}
+	}
 	for _, t := range e.Config.Targets {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -73,7 +94,7 @@ func (e *Engine) Sync(ctx context.Context) error {
 		p, err := e.Factory(account, t.Region, e.Config.Timeout)
 		if err == nil {
 			var groups []string
-			err = retry(ctx, func() error { var de error; groups, de = p.Discover(ctx, t.InstanceIDs); return de })
+			err = retry(ctx, cloud.Retryable, func() error { var de error; groups, de = p.Discover(ctx, t.InstanceIDs); return de })
 			if err == nil {
 				for _, g := range groups {
 					key := t.Account + "/" + t.Region + "/" + g
@@ -81,7 +102,7 @@ func (e *Engine) Sync(ctx context.Context) error {
 						continue
 					}
 					seen[key] = true
-					groupErr := retry(ctx, func() error { return e.reconcile(ctx, p, t.Name, g, desired) })
+					groupErr := retry(ctx, cloud.Retryable, func() error { return e.reconcile(ctx, p, t.Name, g, desired) })
 					if groupErr != nil {
 						e.Log.Error("security group sync failed", "target", t.Name, "group", cloud.Mask(g), "error", groupErr)
 						failures = append(failures, fmt.Errorf("target %s: %w", t.Name, groupErr))

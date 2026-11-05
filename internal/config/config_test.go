@@ -62,3 +62,29 @@ func TestLighthouseInstanceIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestFail2banMateStandaloneConfiguration(t *testing.T) {
+	base := "owner_id: home\nfail2ban_mate:\n  base_url: https://mate.example.com\n  token_env: MATE_TOKEN\n"
+	c, err := Decode(strings.NewReader(base))
+	if err != nil || c.Fail2banMate == nil || len(c.Targets) != 0 {
+		t.Fatalf("standalone configuration rejected: %v", err)
+	}
+	if _, err := Decode(strings.NewReader(valid + strings.TrimPrefix(base, "owner_id: home\n"))); err != nil {
+		t.Fatalf("mixed configuration rejected: %v", err)
+	}
+	for _, invalid := range []string{
+		"owner_id: home\n",
+		base + "interval: 24h\n",
+		strings.Replace(base, "https://", "http://", 1),
+		strings.Replace(base, "mate.example.com", "user:secret@mate.example.com", 1),
+		strings.Replace(base, "mate.example.com", "mate.example.com/path", 1),
+		strings.Replace(base, "mate.example.com", "mate.example.com?token=secret", 1),
+		strings.Replace(base, "MATE_TOKEN", "literal/token", 1),
+	} {
+		if _, err := Decode(strings.NewReader(invalid)); err == nil {
+			t.Fatal("accepted invalid integration configuration")
+		} else if strings.Contains(err.Error(), "secret") {
+			t.Fatal("configuration error leaked a value")
+		}
+	}
+}
