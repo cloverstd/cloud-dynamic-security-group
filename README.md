@@ -34,6 +34,23 @@ set +a
 
 退出码：`0` 成功或正常信号退出；`1` 单次同步失败；`2` 命令或配置错误。常驻模式记录每轮错误并继续下一轮，收到 SIGINT／SIGTERM 后退出。cron 使用 `sync`，并通过 `flock` 防止多个进程重叠；同一 `owner_id` 的同一安全组应由单个进程负责。
 
+## 同步 Fail2ban Mate
+
+登录 [Fail2ban Mate 后台](https://fail2ban.cloverstd.com/admin)，在「接口接入」创建 Token，将它保存到进程环境变量 `FAIL2BAN_MATE_TOKEN`（Docker Compose 可以使用本地 `.env`）。在 `config.yaml` 启用：
+
+```yaml
+owner_id: home
+interval: 60s
+timeout: 10s
+fail2ban_mate:
+  base_url: https://fail2ban.cloverstd.com
+  token_env: FAIL2BAN_MATE_TOKEN
+```
+
+这份配置可独立运行，也可添加 `accounts` 和 `targets` 同步云安全组。每轮将探测到的 IPv4 写入同一条动态规则，换 IP 时替换旧地址，每次成功同步续期 24 小时。配置间隔应留出重试时间。使用 `sync --dry-run` 可检查接入和当前规则，不会更新或续期。
+
+轮换 Token 后更新环境变量并重启进程或容器。要停止放行，在后台撤销该调用方的 Token。单独删除规则后，只要调用程序还在运行，下轮就会重建。停止程序而未撤销时，规则在最后一次成功同步后 24 小时过期。不同出口使用不同 `owner_id`，同一规则由一个进程负责。
+
 ## 配置
 
 完整的三云示例见 [config.example.yaml](config.example.yaml)。只使用腾讯云时可以简化为：

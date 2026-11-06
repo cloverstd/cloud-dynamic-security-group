@@ -41,3 +41,8 @@ targets:
     account: aliyun-account
     region: cn-hangzhou
     instance_ids: [i-example]
+
+# Optional. When enabled, cloud accounts and targets can be omitted.
+# fail2ban_mate:
+#   base_url: https://fail2ban.cloverstd.com
+#   token_env: FAIL2BAN_MATE_TOKEN

@@ -13,6 +13,7 @@ import (
 
 	"github.com/cloverstd/cloud-dynamic-security-group/internal/cloud"
 	"github.com/cloverstd/cloud-dynamic-security-group/internal/config"
+	"github.com/cloverstd/cloud-dynamic-security-group/internal/fail2banmate"
 	"github.com/cloverstd/cloud-dynamic-security-group/internal/publicip"
 	"github.com/cloverstd/cloud-dynamic-security-group/internal/syncer"
 )
@@ -60,6 +61,9 @@ func run(ctx context.Context, args []string, output io.Writer) int {
 		return 2
 	}
 	engine := syncer.Engine{Config: cfg, Detector: publicip.New(cfg.IPSources, cfg.Timeout), Factory: cloud.New, Log: log, DryRun: *dry}
+	if c := cfg.Fail2banMate; c != nil {
+		engine.Fail2banMate = fail2banmate.New(c.BaseURL, c.TokenEnv, cfg.Timeout)
+	}
 	for {
 		err = engine.Sync(ctx)
 		if ctx.Err() != nil {

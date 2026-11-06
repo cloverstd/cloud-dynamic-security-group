@@ -296,3 +296,58 @@ func TestUnconfirmedDeletionHasBoundedRetries(t *testing.T) {
 		t.Fatal("lost current rule")
 	}
 }
+
+type whitelistFunc func(context.Context, string, netip.Addr, bool) (bool, error)
+
+func (f whitelistFunc) Sync(ctx context.Context, key string, ip netip.Addr, dryRun bool) (bool, error) {
+	return f(ctx, key, ip, dryRun)
+}
+
+func TestWhitelistAndCloudFailuresAreIndependent(t *testing.T) {
+	whitelistErr := errors.New("whitelist unavailable")
+	cloudErr := errors.New("cloud unavailable")
+	for _, cloudFailure := range []error{nil, cloudErr} {
+		f := &fake{groups: []string{"sg-example"}, discoverErr: cloudFailure}
+		e, _ := engine(f)
+		e.Fail2banMate = whitelistFunc(func(_ context.Context, key string, ip netip.Addr, dryRun bool) (bool, error) {
+			if key != "home" || ip.String() != "8.8.8.8" || dryRun {
+				t.Fatal("unexpected whitelist sync arguments")
+			}
+			return false, whitelistErr
+		})
+		err := e.Sync(t.Context())
+		if !errors.Is(err, whitelistErr) || (cloudFailure != nil && !errors.Is(err, cloudFailure)) {
+			t.Fatalf("missing target failure: %v", err)
+		}
+		if cloudFailure == nil && writes(f) != "add" {
+			t.Fatal("whitelist error skipped cloud")
+		}
+	}
+}
+
+func TestStandaloneWhitelistRetriesAndMasksPreview(t *testing.T) {
+	e, log := engine(nil)
+	e.Config.Targets = nil
+	e.DryRun = true
+	e.Fail2banMate = whitelistFunc(func(_ context.Context, _ string, _ netip.Addr, dryRun bool) (bool, error) {
+		if !dryRun {
+			t.Fatal("dry-run flag was lost")
+		}
+		return true, nil
+	})
+	if err := e.Sync(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(log.String(), "8.8.8.8") || !strings.Contains(log.String(), "would_change_ip=true") {
+		t.Fatal("preview log is missing or exposed the address")
+	}
+	n := 0
+	transient := errors.New("temporary")
+	err := retry(t.Context(), func(err error) bool { return errors.Is(err, transient) }, func() error {
+		n++
+		return transient
+	})
+	if n != 3 || !errors.Is(err, transient) {
+		t.Fatalf("wrong retry limit: %d %v", n, err)
+	}
+}

@@ -13,12 +13,18 @@ import (
 )
 
 type Config struct {
-	OwnerID   string        `yaml:"owner_id"`
-	Interval  time.Duration `yaml:"interval"`
-	Timeout   time.Duration `yaml:"timeout"`
-	IPSources []string      `yaml:"ip_sources"`
-	Accounts  []Account     `yaml:"accounts"`
-	Targets   []Target      `yaml:"targets"`
+	OwnerID      string        `yaml:"owner_id"`
+	Interval     time.Duration `yaml:"interval"`
+	Timeout      time.Duration `yaml:"timeout"`
+	IPSources    []string      `yaml:"ip_sources"`
+	Accounts     []Account     `yaml:"accounts"`
+	Targets      []Target      `yaml:"targets"`
+	Fail2banMate *Fail2banMate `yaml:"fail2ban_mate"`
+}
+
+type Fail2banMate struct {
+	BaseURL  string `yaml:"base_url"`
+	TokenEnv string `yaml:"token_env"`
 }
 
 type Account struct {
@@ -94,8 +100,21 @@ func (c Config) Validate() error {
 		}
 		accounts[a.Name] = a.Provider
 	}
-	if len(c.Targets) == 0 {
-		return errors.New("targets cannot be empty")
+	if c.Fail2banMate != nil {
+		u, err := url.Parse(c.Fail2banMate.BaseURL)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil ||
+			u.ForceQuery || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" ||
+			(u.Path != "" && u.Path != "/") {
+			return errors.New("fail2ban_mate.base_url must be an HTTPS origin without credentials, path, query or fragment")
+		}
+		if !envPattern.MatchString(c.Fail2banMate.TokenEnv) {
+			return errors.New("fail2ban_mate.token_env must reference an environment variable name")
+		}
+		if c.Interval >= 24*time.Hour {
+			return errors.New("interval must be less than 24h with fail2ban_mate")
+		}
+	} else if len(c.Targets) == 0 {
+		return errors.New("at least one cloud target or fail2ban_mate must be configured")
 	}
 	names := map[string]bool{}
 	for _, t := range c.Targets {
